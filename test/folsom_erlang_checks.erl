@@ -70,6 +70,8 @@ create_metrics() ->
 
     ok = folsom_metrics:new_spiral(spiral),
 
+    ok = folsom_metrics:new_daily(daily),
+
     ?debugFmt("ensuring meter tick is registered with gen_server~n", []),
     ok = ensure_meter_tick_exists(2),
 
@@ -82,10 +84,10 @@ create_metrics() ->
     {state, List} = folsom_meter_timer_server:dump(),
     2 = length(List),
 
-    %% check a server got started for the spiral metric
-    1 = length(supervisor:which_children(folsom_sample_slide_sup)),
+    %% check a server got started for the spiral and daily metric
+    2 = length(supervisor:which_children(folsom_sample_slide_sup)),
 
-    15 = length(folsom_metrics:get_metrics()),
+    16 = length(folsom_metrics:get_metrics()),
 
     ?debugFmt("~n~nmetrics: ~p~n", [folsom_metrics:get_metrics()]).
 
@@ -96,7 +98,8 @@ tag_metrics() ->
     ok = folsom_metrics:tag_metric(<<"gauge">>, Group),
     ok = folsom_metrics:tag_metric(meter, Group),
     ok = folsom_metrics:tag_metric(spiral, Group),
-    ?debugFmt("~n~ntagged metrics: ~p, ~p, ~p, ~p and ~p in group ~p~n", [counter,counter2,<<"gauge">>,meter,spiral,Group]).
+    ok = folsom_metrics:tag_metric(daily, Group),
+    ?debugFmt("~n~ntagged metrics: ~p, ~p, ~p, ~p, ~p and ~p in group ~p~n", [counter,counter2,<<"gauge">>,meter,spiral,daily,Group]).
 
 populate_metrics() ->
     ok = folsom_metrics:notify({counter, {inc, 1}}),
@@ -141,27 +144,29 @@ populate_metrics() ->
 
     ?debugFmt("testing meter ...", []),
 
-    % simulate an interval tick
+                                                % simulate an interval tick
     folsom_metrics_meter:tick(meter),
 
     [ok,ok,ok,ok,ok] =
         [ folsom_metrics:notify({meter, Item}) || Item <- [100, 100, 100, 100, 100]],
 
-    % simulate an interval tick
+                                                % simulate an interval tick
     folsom_metrics_meter:tick(meter),
 
     ?debugFmt("testing meter reader ...", []),
 
-    % simulate an interval tick
+                                                % simulate an interval tick
     folsom_metrics_meter_reader:tick(meter_reader),
 
     [ok,ok,ok,ok,ok] =
         [ folsom_metrics:notify({meter_reader, Item}) || Item <- [1, 10, 100, 1000, 10000]],
 
-    % simulate an interval tick
+                                                % simulate an interval tick
     folsom_metrics_meter_reader:tick(meter_reader),
 
-    folsom_metrics:notify_existing_metric(spiral, 100, spiral).
+    folsom_metrics:notify_existing_metric(spiral, 100, spiral),
+
+    folsom_metrics:notify_existing_metric(daily, 200, daily).
 
 check_metrics() ->
     0 = folsom_metrics:get_metric_value(counter),
@@ -180,13 +185,13 @@ check_metrics() ->
     HugeHistogram = folsom_metrics:get_histogram_statistics(<<"hugedata">>),
     huge_histogram_checks(HugeHistogram),
 
-    % just check exdec for non-zero values
+                                                % just check exdec for non-zero values
     Exdec = folsom_metrics:get_histogram_statistics(exdec),
 
     ?debugFmt("checking exdec sample~n~p~n", [Exdec]),
 
     ok = case proplists:get_value(median, Exdec) of
-        Median when Median > 0 ->
+             Median when Median > 0 ->
                  ok;
              _ ->
                  error
@@ -238,12 +243,21 @@ check_metrics() ->
     duration_check(Dur),
 
     %% check spiral
-    [{count, 100}, {one, 100}] = folsom_metrics:get_metric_value(spiral).
+    [{count, 100}, {one, 100}] = folsom_metrics:get_metric_value(spiral),
+
+    %% check daily
+    [{tenSec, 200,_},
+     {min, 200,_},
+     {tenMin, 200,_},
+     {hour, 200,_},
+     {day, 200,_},
+     {total, 200,_}] = folsom_metrics:get_metric_value(daily).
+
 
 check_group_metrics() ->
     Group = "mygroup",
     Metrics = folsom_metrics:get_metrics_value(Group),
-    5 = length(Metrics),
+    6 = length(Metrics),
     {counter, 0} = lists:keyfind(counter,1,Metrics),
     {counter2, 0} = lists:keyfind(counter2,1,Metrics),
     {<<"gauge">>, 2} = lists:keyfind(<<"gauge">>,1,Metrics),
@@ -264,6 +278,13 @@ check_group_metrics() ->
 
     {spiral, [{count, 100}, {one, 100}]} = lists:keyfind(spiral,1,Metrics),
 
+    {daily, [{tenSec, 200,_},
+             {min, 200,_},
+             {tenMin, 200,_},
+             {hour, 200,_},
+             {day, 200,_},
+             {total, 200,_}]} = lists:keyfind(daily,1,Metrics),
+
     Counters = folsom_metrics:get_metrics_value(Group,counter),
     {counter, 0} = lists:keyfind(counter,1,Counters),
     {counter2, 0} = lists:keyfind(counter2,1,Counters),
@@ -272,13 +293,14 @@ check_group_metrics() ->
     ok = folsom_metrics:untag_metric(<<"gauge">>, Group),
     ok = folsom_metrics:untag_metric(meter, Group),
     ok = folsom_metrics:untag_metric(spiral, Group),
-    ?debugFmt("~n~nuntagged metrics: ~p, ~p, ~p and ~p in group ~p~n", [counter2,<<"gauge">>,meter,spiral,Group]),
+    ok = folsom_metrics:untag_metric(daily, Group),
+    ?debugFmt("~n~nuntagged metrics: ~p, ~p, ~p, ~p and ~p in group ~p~n", [counter2,<<"gauge">>,meter,spiral,daily,Group]),
     RemainingMetrics = folsom_metrics:get_metrics_value(Group),
     1 = length(RemainingMetrics),
     {counter, 0} = lists:keyfind(counter,1,Metrics).
 
 delete_metrics() ->
-    17 = length(ets:tab2list(?FOLSOM_TABLE)),
+    18 = length(ets:tab2list(?FOLSOM_TABLE)),
 
     ok = folsom_metrics:delete_metric(counter),
     ok = folsom_metrics:delete_metric(counter2),
@@ -311,6 +333,7 @@ delete_metrics() ->
 
     ok = folsom_metrics:delete_metric(duration),
     ok = folsom_metrics:delete_metric(spiral),
+    ok = folsom_metrics:delete_metric(daily),
 
     0 = length(ets:tab2list(?FOLSOM_TABLE)).
 
@@ -363,7 +386,7 @@ histogram_checks(List) ->
          end,
 
     Value = proplists:get_value(harmonic_mean, List),
-    %?debugFmt("~p~n", [Value]),
+                                                %?debugFmt("~p~n", [Value]),
     ok = case Value - 8.333122900936845 of
              Diff when Diff < 0.00000001 ->
                  ok;
@@ -428,7 +451,7 @@ cpu_topology() ->
 run_convert_and_jsonify(Item) ->
     ?debugFmt("Converting ... ~n~p~n", [Item]),
     Result = folsom_vm_metrics:convert_system_info({cpu_topology, Item}),
-    %?debugFmt("~p~n", [mochijson2:encode(Result)]).
+                                                %?debugFmt("~p~n", [mochijson2:encode(Result)]).
     mochijson2:encode(Result).
 
 c_compiler_used() ->
@@ -441,7 +464,7 @@ c_compiler_used() ->
                 [{compiler, msc}, {version, <<"1600">>}]],
 
     ?assertEqual(Expected, [folsom_vm_metrics:convert_system_info({c_compiler_used, {Compiler, Version}})
-                             || {Compiler, Version} <- Test]).
+                            || {Compiler, Version} <- Test]).
 
 
 duration_check(Duration) ->
