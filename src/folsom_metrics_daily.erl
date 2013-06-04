@@ -43,8 +43,8 @@
 new(Name) ->
     Daily = #daily{},
     Pid = folsom_sample_slide_sup:start_slide_server(?MODULE,
-                                                           Daily#daily.tid,
-                                                           ?WINDOW),
+                                                     Daily#daily.tid,
+                                                     ?WINDOW),
     ets:insert_new(Daily#daily.tid,
                    [{{total, N}, 0} || N <- lists:seq(0,?WIDTH-1)]),
     ets:insert(?DAILY_TABLE, {Name, Daily#daily{server=Pid}}).
@@ -66,40 +66,51 @@ get_value(Name) ->
 
 trim(Tid, _Window) ->
     Oldest = folsom_utils:now_epoch() - ?WINDOW,
-    OldestMin = Oldest div 60 - ?MIN_WINDOW, 
-    
+    OldestMin = Oldest div 60 - ?MIN_WINDOW,
+
     ets:select_delete(Tid, [{{{sec,'$1','_'},'_'}, [{'<', '$1', Oldest}], ['true']}]),
     ets:select_delete(Tid, [{{{min,'$1','_'},'_'}, [{'<', '$1', OldestMin}], ['true']}]).
 
 get_values(Name)->
     Now = folsom_utils:now_epoch(),
+    {UpTime,_} = erlang:statistics(wall_clock),
+    UpTimeSec = UpTime div 1000,
     TenSecAgo = Now - 10,
     MinAgo = Now - 60,
     TenMinAgo = Now div 60 - 10,
     HourAgoMin = Now div 60 - 60,
 
     #daily{tid=Tid} = get_value(Name),
-    
-    TenSec = lists:sum(ets:select(Tid, [{{{sec,'$1','_'},'$2'},
-					 [{'>=', '$1', TenSecAgo}],['$2']}])),
-    TenSecAvg = TenSec / 10,    
-    Min    = lists:sum(ets:select(Tid, [{{{sec,'$1','_'},'$2'},
-					[{'>=', '$1', MinAgo}],['$2']}])),
-    TenMin = lists:sum(ets:select(Tid, [{{{min,'$1','_'},'$2'},
-					 [{'>=', '$1', TenMinAgo}],['$2']}])),
-    Hour   = lists:sum(ets:select(Tid, [{{{min,'$1','_'},'$2'},
-					[{'>=', '$1', HourAgoMin}],['$2']}])),
-    Day    = lists:sum(ets:select(Tid, [{{{min,'_','_'},'$1'},[],['$1']}])),    
-    Total  = lists:sum(ets:select(Tid, [{{{total,'_'},'$1'},[],['$1']}])),
-		      
-    [{tenSecAVG, TenSecAvg},
-     {tenSec, TenSec}, 
-     {minSum, Min},
-     {tenMinSum, TenMin},
-     {hourSum, Hour},
-     {daySum, Day},
-     {total, Total}].
 
+    TenSec = lists:sum(ets:select(Tid, [{{{sec,'$1','_'},'$2'},
+                                         [{'>=', '$1', TenSecAgo}],['$2']}])),
+    Min    = lists:sum(ets:select(Tid, [{{{sec,'$1','_'},'$2'},
+                                         [{'>=', '$1', MinAgo}],['$2']}])),
+    TenMin = lists:sum(ets:select(Tid, [{{{min,'$1','_'},'$2'},
+                                         [{'>=', '$1', TenMinAgo}],['$2']}])),
+    Hour   = lists:sum(ets:select(Tid, [{{{min,'$1','_'},'$2'},
+                                         [{'>=', '$1', HourAgoMin}],['$2']}])),
+    Day    = lists:sum(ets:select(Tid, [{{{min,'_','_'},'$1'},[],['$1']}])),
+    Total  = lists:sum(ets:select(Tid, [{{{total,'_'},'$1'},[],['$1']}])),
+
+    TenSecAvg = TenSec   / uptime_or_fixed(UpTimeSec, 10),
+    MinAvg    = Min      / uptime_or_fixed(UpTimeSec, 60),
+    TenMinAvg = TenMin   / uptime_or_fixed(UpTimeSec, 600),
+    HourAvg   = Hour  / uptime_or_fixed(UpTimeSec, 3600),
+    DayAvg    = Day   / uptime_or_fixed(UpTimeSec, 86400),
+    TotalAvg  = Total / (UpTime div 1000),
+
+    [{tenSec, TenSec, TenSecAvg},
+     {min, Min, MinAvg},
+     {tenMin, TenMin, TenMinAvg},
+     {hour, Hour, HourAvg},
+     {day, Day, DayAvg},
+     {total, Total, TotalAvg}].
+
+uptime_or_fixed(UpTimeSec, TargetSec) when UpTimeSec >= TargetSec->
+    TargetSec;
+uptime_or_fixed(UpTimeSec, _) ->
+    UpTimeSec.
 
 get_rnd()->
     X = erlang:system_info(scheduler_id),
