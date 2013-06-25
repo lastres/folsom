@@ -37,12 +37,15 @@ new(Size) ->
     #none{size = Size}.
 
 update(#none{size = Size, reservoir = Reservoir, n = N} = Sample, Value)
-  when N =:= Size ->
-    ets:insert(Reservoir, {N, Value}),
-    Sample#none{n = 1};
-update(#none{reservoir = Reservoir, n = N} = Sample, Value) ->
-    ets:insert(Reservoir, {N, Value}),
-    Sample#none{n = N  + 1}.
+  when N < Size ->
+    ets:insert(Reservoir, {os:timestamp(), Value}),
+    Sample#none{n = N + 1};
+update(#none{reservoir = Reservoir, n = N, size = Size} = Sample, Value)
+  when N == Size ->
+    Oldest = ets:first(Reservoir),
+    ets:delete(Reservoir, Oldest),
+    ets:insert(Reservoir, {os:timestamp(), Value}),
+    Sample.
 
 get_values(#none{reservoir = Reservoir}) ->
     {_, Values} = lists:unzip(ets:tab2list(Reservoir)),

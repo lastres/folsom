@@ -188,7 +188,7 @@ check_metrics() ->
 
     2 = folsom_metrics:get_metric_value(<<"gauge">>),
 
-    [11,12,13,14,15,6,7,8,9,10] = folsom_metrics:get_metric_value(noneb),
+    [6,7,8,9,10,11,12,13,14,15] = folsom_metrics:get_metric_value(noneb),
 
     [11,12,13,14,15] = folsom_metrics:get_metric_value(nonec),
 
