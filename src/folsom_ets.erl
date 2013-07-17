@@ -329,6 +329,11 @@ delete_histogram(Name, #histogram{type = none, sample = #none{reservoir = Reserv
     true = ets:delete(?FOLSOM_TABLE, Name),
     true = ets:delete(Reservoir),
     ok;
+delete_histogram(Name, #histogram{type = slide_sorted, sample = #slide_sorted{reservoir = Reservoir}}) ->
+    true = ets:delete(?HISTOGRAM_TABLE, Name),
+    true = ets:delete(?FOLSOM_TABLE, Name),
+    true = ets:delete(Reservoir),
+    ok;
 delete_histogram(Name, #histogram{type = exdec}) ->
     true = ets:delete(?HISTOGRAM_TABLE, Name),
     true = ets:delete(?FOLSOM_TABLE, Name),

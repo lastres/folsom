@@ -63,6 +63,8 @@ create_metrics() ->
     ok = folsom_metrics:new_histogram(noneb, none, 10),
     ok = folsom_metrics:new_histogram(nonec, none, 5),
 
+    ok = folsom_metrics:new_histogram(slide_sorted_a, slide_sorted, 10),
+
     ok = folsom_metrics:new_histogram(timed, none, 5000),
     ok = folsom_metrics:new_histogram(timed2, none, 5000),
 
@@ -93,7 +95,7 @@ create_metrics() ->
     2 = length(supervisor:which_children(folsom_sample_slide_sup)),
 
 
-    18 = length(folsom_metrics:get_metrics()),
+    19 = length(folsom_metrics:get_metrics()),
 
     ?debugFmt("~n~nmetrics: ~p~n", [folsom_metrics:get_metrics()]).
 
@@ -139,6 +141,8 @@ populate_metrics() ->
     [ok = folsom_metrics:notify({noneb, Value}) || Value <- ?DATA2],
 
     [ok = folsom_metrics:notify({nonec, Value}) || Value <- ?DATA2],
+
+    [ok = folsom_metrics:notify({slide_sorted_a, Value}) || Value <- ?DATA2],
 
     3.141592653589793 = folsom_metrics:histogram_timed_update(timed, math, pi, []),
 
@@ -197,6 +201,8 @@ check_metrics() ->
     [11,12,13,14,15,6,7,8,9,10] = folsom_metrics:get_metric_value(noneb),
 
     [11,12,13,14,15] = folsom_metrics:get_metric_value(nonec),
+
+    [6,7,8,9,10,11,12,13,14,15] = folsom_metrics:get_metric_value(slide_sorted_a),
 
     Histogram1 = folsom_metrics:get_histogram_statistics(<<"uniform">>),
     histogram_checks(Histogram1),
@@ -319,7 +325,7 @@ check_group_metrics() ->
     {counter, 0} = lists:keyfind(counter,1,Metrics).
 
 delete_metrics() ->
-    20 = length(ets:tab2list(?FOLSOM_TABLE)),
+    21 = length(ets:tab2list(?FOLSOM_TABLE)),
 
     ok = folsom_metrics:delete_metric(counter),
     ok = folsom_metrics:delete_metric(counter2),
@@ -336,6 +342,8 @@ delete_metrics() ->
     ok = folsom_metrics:delete_metric(nonea),
     ok = folsom_metrics:delete_metric(noneb),
     ok = folsom_metrics:delete_metric(nonec),
+
+    ok = folsom_metrics:delete_metric(slide_sorted_a),
 
     ok = folsom_metrics:delete_metric(timed),
     ok = folsom_metrics:delete_metric(timed2),
